@@ -435,6 +435,76 @@ Grab Existential Variables.
   apply (@lgoal_weight _ _ _ H1).
 Defined.
 
+Definition LPlus{E:LEnv} (A B:LType) : LType := {|
+  ltype := ltype A + ltype B;
+  lweight x :=
+    match x with
+    | inl xl => lweight xl
+    | inr xr => lweight xr
+    end
+|}.
+Definition LZero{E:LEnv} : LType := {|
+  ltype := Empty_set;
+  lweight x := match x with end
+|}.
+Notation "A + B" := (LPlus A%ILL B%ILL) : ILL_scope.
+Notation "0" := LZero : ILL_scope.
+
+Definition lplus_left{E:LEnv} {A B:LType} {W:LWeight}
+    (H0 : LGoal A W) : LGoal (A + B) W.
+Proof.
+  refine {|
+    lgoal_proof := inl (lgoal_proof H0) : ltype (A + B)
+  |}.
+  apply lgoal_weight.
+Defined.
+Definition lplus_right{E:LEnv} {A B:LType} {W:LWeight}
+    (H1 : LGoal B W) : LGoal (A + B) W.
+Proof.
+  refine {|
+    lgoal_proof := inr (lgoal_proof H1) : ltype (A + B)
+  |}.
+  apply lgoal_weight.
+Defined.
+
+Definition lplus_uncurry{E:LEnv} {A B C:LType} {W:LWeight}
+    (H0 : LGoal (A -o C) W) (H1 : LGoal (B -o C) W) : LGoal (A + B -o C) W.
+Proof.
+  refine {|
+    lgoal_proof := {|
+      lfun_val := fun (x:ltype (A + B)) =>
+        match x with
+        | inl xl => lfun_val (lgoal_proof H0) xl
+        | inr xr => lfun_val (lgoal_proof H1) xr
+        end;
+      lfun_weight := W
+    |} : ltype (A + B -o C);
+    lgoal_weight := eq_refl
+  |}.
+Grab Existential Variables.
+  intros [xl|xr]; simpl.
+  - rewrite <-lfun_weight_eqn.
+    f_equal.
+    apply (@lgoal_weight _ _ _ H0).
+  - rewrite <-lfun_weight_eqn.
+    f_equal.
+    apply (@lgoal_weight _ _ _ H1).
+Defined.
+Definition lzero_uncurry{E:LEnv} {A:LType} {W:LWeight}
+    : LGoal (0 -o A) W.
+Proof.
+  refine {|
+    lgoal_proof := {|
+      lfun_val := fun (x:ltype 0) =>
+        match x with end;
+      lfun_weight := W
+    |} : ltype (0 -o A);
+    lgoal_weight := eq_refl
+  |}.
+Grab Existential Variables.
+  intros [].
+Defined.
+
 Ltac ll_cleanup :=
   rewrite ?LWeightZeroL, ?LWeightZeroR;
   repeat match goal with
@@ -473,6 +543,11 @@ Tactic Notation "splitll" :=
   (refine (lwith_split _ _); ll_cleanup) ||
   (refine ltop_split).
 
+Tactic Notation "leftll" :=
+  refine (lplus_left _); ll_cleanup.
+Tactic Notation "rightll" :=
+  refine (lplus_right _); ll_cleanup.
+
 Tactic Notation "destructll" ident(x) "as" "[" ident(y) ident(z) "]" :=
   revertll x; refine (ltensor_uncurry _); introll y z.
 Tactic Notation "destructll" ident(x) :=
@@ -482,6 +557,11 @@ Tactic Notation "destructll" ident(x) "as" "[" ident(y) "_" "]" :=
   revertll x; refine (lwith_uncurry_l _); introll y.
 Tactic Notation "destructll" ident(x) "as" "[" "_" ident(z) "]" :=
   revertll x; refine (lwith_uncurry_r _); introll z.
+
+Tactic Notation "destructll" ident(x) "as" "[" ident(y) "|" ident(z) "]" :=
+  revertll x; refine (lplus_uncurry _ _); [introll y | introll z].
+Tactic Notation "destructll" ident(x) "as" "[" "]" :=
+  revertll x; refine lzero_uncurry.
 
 
 
@@ -533,5 +613,17 @@ Proof.
   - destructll x as [_ x].
     exactll x.
   - destructll x as [x _].
+    exactll x.
+Qed.
+
+Lemma PlusComm{E:LEnv} (A B:LType) :
+  A + B -o B + A
+  [using_hypotheses 0].
+Proof.
+  introll x.
+  destructll x as [x | x].
+  - rightll.
+    exactll x.
+  - leftll.
     exactll x.
 Qed.
