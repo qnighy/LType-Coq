@@ -217,12 +217,6 @@ Notation "T [ 'using_hypotheses' W ]" :=
    no associativity,
    format "'[' T '//' [ 'using_hypotheses'  W ] ']'").
 
-Ltac ll_cleanup :=
-  rewrite ?LWeightZeroL, ?LWeightZeroR;
-  repeat match goal with
-  | [ x : ltype _ |- _ ] => clear x
-  end.
-
 Definition limpl_intro{E:LEnv} {A B:LType} {W:LWeight}
     (X : forall a : ltype A, LGoal B (W + lweight a)) :
     LGoal (A -o B) W := {|
@@ -233,19 +227,6 @@ Definition limpl_intro{E:LEnv} {A B:LType} {W:LWeight}
   |} : ltype (A -o B);
   lgoal_weight := eq_refl
 |}.
-
-Tactic Notation "introll" ident(x) :=
-  refine (limpl_intro _); intro x; ll_cleanup.
-Tactic Notation "introll" :=
-  let x := fresh in introll x.
-Tactic Notation "introll" ident(x0) ident(x1) :=
-  introll x0; introll x1.
-Tactic Notation "introll" ident(x0) ident(x1) ident(x2) :=
-  introll x0; introll x1; introll x2.
-Tactic Notation "introll" ident(x0) ident(x1) ident(x2) ident(x3) :=
-  introll x0; introll x1; introll x2; introll x3.
-Tactic Notation "introll" ident(x0) ident(x1) ident(x2) ident(x3) ident(x4) :=
-  introll x0; introll x1; introll x2; introll x3; introll x4.
 
 Definition limpl_revert{E:LEnv} {A B:LType} {W:LWeight} (x:ltype A)
     {X:LWeight} {mn:LWeightMinus W (lweight x) X}
@@ -261,9 +242,6 @@ Proof.
   apply (@lgoal_weight _ _ _ H).
 Defined.
 
-Tactic Notation "revertll" ident(x) :=
-  refine (limpl_revert x _); ll_cleanup.
-
 Definition limpl_applygoal{E:LEnv} {A B:LType} {W:LWeight}
     (x:ltype (A -o B)) {X:LWeight} {mn:LWeightMinus W (lweight x) X} :
     LGoal A X -> LGoal B W.
@@ -278,9 +256,6 @@ Proof.
   apply lgoal_weight.
 Defined.
 
-Tactic Notation "applyll" constr(x) :=
-  refine (limpl_applygoal x _); ll_cleanup.
-
 Definition linear_exact{E:LEnv} {A:LType} {W:LWeight}
     (x:ltype A) {X:LWeight} {mn:LWeightMinus W (lweight x) X}
     {ann:LWeightAnnihil X} : LGoal A W.
@@ -292,9 +267,6 @@ Proof.
   rewrite (@lweightannihil_eqn _ _ ann).
   apply LWeightZeroL.
 Defined.
-
-Tactic Notation "exactll" constr(x) :=
-  refine (linear_exact x).
 
 Definition linear_cut{E:LEnv} (A:LType) {B:LType} {W:LWeight} (V:LWeight)
     {X:LWeight} {mn:LWeightMinus W V X}
@@ -311,9 +283,6 @@ Proof.
   - apply (@lgoal_weight _ _ _ X1).
 Defined.
 Arguments linear_cut [E] A%ILL [B] [W] V%LWeight [X] [mn] _ _.
-
-Tactic Notation "cutll" constr(A) "carrying" constr(V) :=
-  refine (linear_cut A V _ _); ll_cleanup.
 
 Definition LTensor{E:LEnv} (A B:LType) : LType := {|
   ltype := ltype A * ltype B;
@@ -347,11 +316,6 @@ Proof.
   |}.
   apply lweightannihil_eqn.
 Defined.
-
-Tactic Notation "splitll" "carrying" constr(V) :=
-  refine (ltensor_split V _ _); ll_cleanup.
-Tactic Notation "splitll" :=
-  refine lone_split; ll_cleanup.
 
 Definition ltensor_uncurry{E:LEnv} {A B C:LType} {W:LWeight} :
   LGoal (A -o B -o C) W -> LGoal (A * B -o C) W.
@@ -392,10 +356,135 @@ Grab Existential Variables.
   apply lgoal_weight.
 Defined.
 
+
+Record LWithVal{E:LEnv} (A B:LType) := {
+  lwithval_fst : ltype A;
+  lwithval_snd : ltype B;
+  lwithval_weight_eqn : lweight lwithval_fst = lweight lwithval_snd
+}.
+Arguments LWithVal [E] A%ILL B%ILL.
+Arguments lwithval_fst [E] [A] [B] _.
+Arguments lwithval_snd [E] [A] [B] _.
+Arguments lwithval_weight_eqn [E] [A] [B] _.
+
+Definition LWith{E:LEnv} (A B:LType) : LType := {|
+  ltype := LWithVal A B;
+  lweight x := lweight (lwithval_fst x)
+|}.
+Definition LTop{E:LEnv} : LType := {|
+  ltype := LWeight;
+  lweight x := x
+|}.
+Notation "A && B" := (LWith A%ILL B%ILL) : ILL_scope.
+Notation "'TT'" := LTop : ILL_scope.
+
+Definition lwith_split{E:LEnv} {A B:LType} {W:LWeight}
+  (H0 : LGoal A W) (H1 : LGoal B W) : LGoal (A && B) W.
+Proof.
+  refine {|
+    lgoal_proof := {|
+      lwithval_fst := lgoal_proof H0;
+      lwithval_snd := lgoal_proof H1;
+      lwithval_weight_eqn :=
+        eq_trans (eq_sym (lgoal_weight H0)) (lgoal_weight H1)
+    |} : ltype (A && B);
+    lgoal_weight := lgoal_weight H0
+  |}.
+Defined.
+Definition ltop_split{E:LEnv} {W:LWeight} : LGoal TT W.
+Proof.
+  refine {|
+    lgoal_proof := W : ltype TT;
+    lgoal_weight := eq_refl
+  |}.
+Defined.
+
+Definition lwith_uncurry_l{E:LEnv} {A B C:LType} {W:LWeight}
+  (H0 : LGoal (A -o C) W) : LGoal (A && B -o C) W.
+Proof.
+  refine {|
+    lgoal_proof := {|
+      lfun_val := fun(x : ltype (A && B)) =>
+        lfun_val (lgoal_proof H0) (lwithval_fst x);
+      lfun_weight := W
+    |} : ltype (A && B -o C);
+    lgoal_weight := eq_refl
+  |}.
+Grab Existential Variables.
+  intros x; simpl.
+  rewrite <-lfun_weight_eqn.
+  f_equal.
+  apply (@lgoal_weight _ _ _ H0).
+Defined.
+Definition lwith_uncurry_r{E:LEnv} {A B C:LType} {W:LWeight}
+  (H1 : LGoal (B -o C) W) : LGoal (A && B -o C) W.
+Proof.
+  refine {|
+    lgoal_proof := {|
+      lfun_val := fun(x : ltype (A && B)) =>
+        lfun_val (lgoal_proof H1) (lwithval_snd x);
+      lfun_weight := W
+    |} : ltype (A && B -o C);
+    lgoal_weight := eq_refl
+  |}.
+Grab Existential Variables.
+  intros x; simpl.
+  rewrite lwithval_weight_eqn.
+  rewrite <-lfun_weight_eqn.
+  f_equal.
+  apply (@lgoal_weight _ _ _ H1).
+Defined.
+
+Ltac ll_cleanup :=
+  rewrite ?LWeightZeroL, ?LWeightZeroR;
+  repeat match goal with
+  | [ x : ltype _ |- _ ] => clear x
+  end.
+
+Tactic Notation "introll" ident(x) :=
+  refine (limpl_intro _); intro x; ll_cleanup.
+Tactic Notation "introll" :=
+  let x := fresh in introll x.
+Tactic Notation "introll" ident(x0) ident(x1) :=
+  introll x0; introll x1.
+Tactic Notation "introll" ident(x0) ident(x1) ident(x2) :=
+  introll x0; introll x1; introll x2.
+Tactic Notation "introll" ident(x0) ident(x1) ident(x2) ident(x3) :=
+  introll x0; introll x1; introll x2; introll x3.
+Tactic Notation "introll" ident(x0) ident(x1) ident(x2) ident(x3) ident(x4) :=
+  introll x0; introll x1; introll x2; introll x3; introll x4.
+
+Tactic Notation "revertll" ident(x) :=
+  refine (limpl_revert x _); ll_cleanup.
+
+Tactic Notation "applyll" constr(x) :=
+  refine (limpl_applygoal x _); ll_cleanup.
+
+Tactic Notation "exactll" constr(x) :=
+  refine (linear_exact x).
+
+Tactic Notation "cutll" constr(A) "carrying" constr(V) :=
+  refine (linear_cut A V _ _); ll_cleanup.
+
+Tactic Notation "splitll" "carrying" constr(V) :=
+  refine (ltensor_split V _ _); ll_cleanup.
+Tactic Notation "splitll" :=
+  (refine lone_split; ll_cleanup) ||
+  (refine (lwith_split _ _); ll_cleanup) ||
+  (refine ltop_split).
+
 Tactic Notation "destructll" ident(x) "as" "[" ident(y) ident(z) "]" :=
   revertll x; refine (ltensor_uncurry _); introll y z.
 Tactic Notation "destructll" ident(x) :=
   revertll x; refine (lone_uncurry _); ll_cleanup.
+
+Tactic Notation "destructll" ident(x) "as" "[" ident(y) "_" "]" :=
+  revertll x; refine (lwith_uncurry_l _); introll y.
+Tactic Notation "destructll" ident(x) "as" "[" "_" ident(z) "]" :=
+  revertll x; refine (lwith_uncurry_r _); introll z.
+
+
+
 
 (*************************************************)
 (*                  Sample Proof                 *)
@@ -433,4 +522,16 @@ Proof.
   splitll carrying y.
   - exactll y.
   - exactll x.
+Qed.
+
+Lemma WithComm{E:LEnv} (A B:LType) :
+  A && B -o B && A
+  [using_hypotheses 0].
+Proof.
+  introll x.
+  splitll.
+  - destructll x as [_ x].
+    exactll x.
+  - destructll x as [x _].
+    exactll x.
 Qed.
