@@ -1,5 +1,6 @@
 (* Author: Masaki Hara, 2014 *)
 (* Linear Logic Toy for Coq *)
+Require Import List.
 
 
 (*************************************************)
@@ -302,15 +303,33 @@ Proof.
   apply lweight_eqn, lgoal_weight_eqn.
 Defined.
 
-Class LHinted{E:LEnv} (l:list (nat * LWeight)) (T:Type) := {
-  lhinted_val : T
-}.
-Arguments LHinted [E] l%LWeight T.
-Arguments Build_LHinted [E] [l] [T] _.
-Arguments lhinted_val [E] [l] [T] _.
+Fixpoint implication_list(T:list Type) (G:Type) : Type :=
+  match T with
+  | nil => G
+  | cons Th Tl => Th -> implication_list Tl G
+  end.
 
-Instance lgoal_autoapply_self{E:LEnv} {T:LType} {l:list (nat * LWeight)}
-   {W:LWeight} (a:ltype T) : LHinted l (LGoal T (lweight a)).
+Fixpoint implication_list_map{T:list Type} {A B:Type}
+    (f : A -> B) : implication_list T A -> implication_list T B :=
+  match T with
+  | nil => f
+  | cons Th Tl => fun g x => implication_list_map f (g x)
+  end.
+
+Definition LHinted{E:LEnv} (l:list (nat * LWeight)) (G:Type) := G.
+Arguments LHinted [E] l%LWeight G.
+
+Class LHintedApp{E:LEnv} (n:nat) (l:list (nat * LWeight))
+                (Impls:list Type) (G:Type) := {
+  lhinted_app_val : implication_list Impls G
+}.
+Arguments LHintedApp [E] n l%LWeight Impls G.
+Arguments Build_LHintedApp [E] n l%LWeight Impls [G] _.
+Arguments lhinted_app_val [E] [n] [l] [Impls] [G] _.
+
+Instance lgoal_autoapply_self{E:LEnv} {T:LType} {n:nat}
+   {l:list (nat * LWeight)} {a:ltype T}
+   : LHintedApp n l nil (LGoal T (0 + lweight a)%LWeight).
 Proof.
   exists.
   refine {|
@@ -318,13 +337,202 @@ Proof.
   |}.
 Defined.
 
-Definition lgoal_autoapply_take{E:LEnv} {A B T:LType} {l:list (nat * LWeight)}
-  {W:LWeight}
-  (f:ltype (A -o B))
-  (
-  (H:LHinted l (LGoal T W)
-  : LHinted l (LGoal T (W + lweight a)%LWeight).
+Definition lgoal_autoapply_take{E:LEnv} {A B T:LType} {n:nat}
+  {l:list (nat * LWeight)} {W:LWeight} (HintWeight:LWeight)
+  {f:ltype (A -o B)}
+  {Impls:list Type}
+  {H:forall a:LGoal A HintWeight,
+       LHintedApp (S n) l Impls (LGoal T (W + lweight (f a))%LWeight)}
+  : LHintedApp n l (LGoal A HintWeight :: Impls)%list
+                      (LGoal T (W + HintWeight + lweight f)%LWeight).
+Proof.
+  exists.
+  intros a.
+  generalize (lhinted_app_val (H a)); clear H.
+  apply implication_list_map.
+  intros H.
+  refine {| lgoal_proof := H |}.
+Defined.
+
+(* manual instance for lgoal_autoapply_take. *)
+Hint Extern 1 (LHintedApp ?n ?l _ (LGoal ?T (_ + lweight ?f)%LWeight)) =>
+  lazymatch l with
+  | context ctx [(n,?W)] =>
+      (* idtac "weight is " W; *)
+      eapply (lgoal_autoapply_take W)
+  | _ =>
+      (* idtac "hint not found"; *)
+      eapply (lgoal_autoapply_take _)
+  end
+  : typeclass_instances.
+
+
+Definition lhinted_init{E:LEnv} {G:Type}
+    (H : LHinted nil G) : G := H.
+
+Definition lhinted_add{E:LEnv} {G:Type} {l:list (nat * LWeight)}
+    (n:nat) (W:LWeight)
+    (H : LHinted ((n,W)::l)%list G) : LHinted l G := H.
+
+Definition lgoal_autoapply_getvalue{E:LEnv} {l:list (nat * LWeight)}
+    {T:LType} {W:LWeight} {X:LWeight} {A:LType} (a:ltype A)
+    {Tl:list Type}
+    {H:LHintedApp 0 l Tl (LGoal T (X + a))}
+    (H0:(W = X + a)%LWeight)
+    (Next:implication_list Tl (LGoal T W) -> LGoal T W)
+    : LHinted l (LGoal T W).
+Proof.
+  apply Next; clear Next.
+  generalize (lhinted_app_val H); clear H.
+  apply implication_list_map.
+  intros H.
+  refine {|
+    lgoal_proof := lgoal_proof H
+  |}.
+  rewrite H0; refine _.
+Defined.
+
+Ltac lweight_solve_count_holes x :=
+  (is_evar x; 1) ||
+  match x with
+  | (?xl + ?xr)%LWeight =>
+      lweight_solve_count_holes xl +
+      lweight_solve_count_holes xr
+  | _ => (has_evar x; fail 1) || 0
+  end.
+
+Lemma test{E:LEnv} {A B C D:LType}
+  (x:ltype A) (y:ltype B) (z:ltype (A -o B -o C -o D)) : LGoal (C -o D) (x+y+z).
+Proof.
+  apply lhinted_init.
+  apply (lhinted_add 0 x).
+  eapply (lgoal_autoapply_getvalue z).
+  - let f := lweight_solve_count_holes (x + y + z)%LWeight in idtac f.
+    refine (_:x + y + z = 0 + x + y + z)%LWeight.
+    apply (lweight_eqn _).
+  - intros H; apply H.
+  assert (H := lgoal_autoapply_getvalue nil (C -o D)%ILL (x + y + z)%LWeight z).
+  lazymatch goal with
+  | [ |- LGoal ?T ?W ] =>
+      let Tl := fresh Tl in
+      evar (Tl : list Type);
+      let X := fresh X in
+      evar (X : LWeight);
+      let H := fresh H in
+      assert (H : @LHintedApp E 0 nil Tl (LGoal T (X+z)));
+        [unfold Tl,X in *; refine _; eapply _|]
+  end.
+  admit.
+  admit.
+  refine _.
+  - eapply lgoal_autoapply_take.
+Qed.
+
+Class LHinted{E:LEnv} (n:nat) (l:list (nat * LWeight))
+    (W V:LWeight) (G:Type) {G':Type} := {
+  lhinted_val : W = V -> G'
+}.
+Arguments LHinted [E] n l%LWeight W%LWeight V%LWeight G [G'].
+Arguments Build_LHinted [E] n l%LWeight W%LWeight V%LWeight [G] [G'] _.
+Arguments lhinted_val [E] [n] [l] [W] [V] [G] [G'] _ _.
+
+Instance lgoal_autoapply_self{E:LEnv} {T:LType} {n:nat}
+   {l:list (nat * LWeight)} {W V:LWeight} {a:ltype T}
+   : @LHinted _ n l W V (LGoal T (0 + lweight a)%LWeight)
+                        (LGoal T (0 + lweight a)%LWeight).
+Proof.
+  split.
+  intros H.
+  refine {|
+    lgoal_proof := a
+  |}.
+Defined.
+
+Definition lgoal_autoapply_take{E:LEnv} {A B T:LType} {n:nat}
+  {l:list (nat * LWeight)} {W eqW eqV:LWeight} (HintWeight:LWeight)
+  {f:ltype (A -o B)}
+  {G':LGoal A HintWeight -> Type}
+  {H:forall a:LGoal A HintWeight,
+       @LHinted _ (S n) l eqW eqV (LGoal T (W + lweight (f a))%LWeight) (G' a)}
+  : @LHinted _ n l eqW eqV (LGoal T (W + HintWeight + lweight f)%LWeight)
+                           (forall a:LGoal A HintWeight, G' a).
+Proof.
+  exists.
+  intros Heq a.
+  apply (lhinted_val (H a)), Heq.
+Defined.
+
+Hint Extern 1 (LHinted ?n ?l (LGoal ?T (_ + lweight ?f)%LWeight)) =>
+  lazymatch l with
+  | context ctx [(n,?W)] =>
+      idtac "weight is " W;
+      eapply (lgoal_autoapply_take W)
+  | _ =>
+      idtac "hint not found";
+      eapply (lgoal_autoapply_take _)
+  end
+  : typeclass_instances.
+
+(*
+Definition lgoal_autoapply_prepare{E:LEnv} {A T:LType}
+  (l:list (nat * LWeight)) {W X:LWeight}
+  (a:ltype A) {G':Type}
+  (H0:@LHinted _ 0 l W (X+lweight a)
+                       (LGoal T (X+lweight a)) G')
+  : LGoal T W.
+Proof.
+  refine {|
+    lgoal_proof := lhinted_val H0;
+    lgoal_weight_eqn := _
+  |}.
+  rewrite H.
+  refine _.
+Defined.
+*)
+
+Lemma test{E:LEnv} {A B C D:LType}
+  (x:ltype A) (y:ltype B) (z:ltype (A -o B -o C -o D)) : LGoal (C -o D) (x+y+z).
+Proof.
+  lazymatch goal with
+  | [ |- LGoal ?T ?W ] =>
+      let G' := fresh G' in
+      evar (G' : Type);
+      let X := fresh X in
+      evar (X : LWeight);
+      let H := fresh H in
+      assert (H : @LHinted _ 0 nil (x + y + z) (X+z) (LGoal T (X+z)) G');
+        unfold G' in *; clear G';
+        unfold X in *; clear X
+  end.
+  - eapply lgoal_autoapply_take.
+    intros a.
+    eapply (@lgoal_autoapply_take E B (C -o D)%ILL (C -o D)%ILL
+                                  1 nil).
+    intros b.
+    eapply lgoal_autoapply_self.
+  - destruct H as [H].
+  apply lhinted_val with
+    (n:=0) (l:=((1, (x + y)%LWeight) :: nil)%list)
+    (G:=LGoal (C -o D) (x + y + z)).
+  eapply (lgoal_autoapply_prepare z).
+  - eapply (@lgoal_autoapply_take).
     
+  -
+  reflexivity.
+  - eapply (lgoal_autoapply_take _).
+    refine _.
+  eapply (lgoal_autoapply_prepare z _).
+  refine (_:(x + y + z)%LWeight = (0 + (x + y) + 0 + z)%LWeight).
+  apply (lweight_eqn _).
+  instantiate.
+  instantiate.
+  - eapply (lgoal_autoapply_take (x + y)%LWeight).
+    eapply (lgoal_autoapply_take _).
+    apply lgoal_autoapply_self.
+    refine _.
+    eapply (lgoal_autoapply_take (x + y)%LWeight).
+  -
+Defined.
 
 Notation "T [ 'using_hypotheses' W ]" :=
   (LGoal T%ILL W%LWeight)
