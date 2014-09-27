@@ -186,48 +186,14 @@ Proof.
   apply LWeightZeroL.
 Defined.
 
-Definition lweight_sum'{E:LEnv} :=
-  fix lweight_sum'(l:list LWeight) : LWeight :=
-  match l with
-  | nil => 0%LWeight
-  | cons h t => (lweight_sum' t + h)%LWeight
-  end.
-
-Definition lweight_sum{E:LEnv} : list LWeight -> LWeight := lweight_sum'.
-Lemma lweight_sum_unfold{E:LEnv} (l:list LWeight)
-    : lweight_sum l = lweight_sum' l.
+Definition lweight_hole{E:LEnv} (W:LWeight) := W.
+Lemma lweight_hole_unfold{E:LEnv} (W:LWeight)
+  : lweight_hole W = W.
 Proof.
   reflexivity.
 Qed.
-Opaque lweight_sum.
+Opaque lweight_hole.
 
-Class LWeightSumTranslate{E:LEnv} (l:list LWeight) (W:LWeight) := {
-  lweightsumtranslate_eqn : lweight_sum l = W
-}.
-Arguments LWeightSumTranslate [E] l%LWeight W%LWeight.
-Arguments Build_LWeightSumTranslate [E] [l] [W] _.
-Arguments lweightsumtranslate_eqn [E] [l] [W] [_].
-Instance LWeightSumTranslateSelf{E:LEnv} (l:list LWeight)
-    : LWeightSumTranslate l (lweight_sum l) := {|
-  lweightsumtranslate_eqn := eq_refl
-|}.
-Instance LWeightSumTranslateAnnihil{E:LEnv}
-    {W:LWeight} {annihil:LWeightAnnihil W}
-    : LWeightSumTranslate nil W.
-Proof.
-  exists.
-  rewrite lweight_sum_unfold.
-  symmetry; apply lweightannihil_eqn.
-Defined.
-Instance LWeightSumTranslateEquation{E:LEnv}
-    {W V:LWeight} {annihil:LWeightEquation W V}
-    : LWeightSumTranslate (cons W nil) V.
-Proof.
-  exists.
-  rewrite lweight_sum_unfold; simpl.
-  rewrite LWeightZeroR.
-  apply (lweight_eqn _).
-Defined.
 
 (*************************************************)
 (*        Definition of Linear Type              *)
@@ -290,12 +256,6 @@ Arguments lgoal_proof [E] [T] [W] _.
 Arguments lgoal_weight_eqn [E] [T] [W] _.
 Existing Instance lgoal_weight_eqn.
 
-(* Instance lgoal_weight_self{E:LEnv} {T:LType} {W:LWeight}
-    (H:LGoal T W) : LWeightCastSelf W (lweight (lgoal_proof H)).
-Proof.
-  exists.
-  symmetry; apply lweight_eqn, lgoal_weight_eqn.
-Defined. *)
 Instance lgoal_weight_self{E:LEnv} {T:LType} {W:LWeight}
     (H:LGoal T W) : LWeightCastSelf (lweight (lgoal_proof H)) W.
 Proof.
@@ -362,7 +322,7 @@ Hint Extern 1 (LHintedApp ?n ?l _ (LGoal ?T (_ + lweight ?f)%LWeight)) =>
       eapply (lgoal_autoapply_take W)
   | _ =>
       (* idtac "hint not found"; *)
-      eapply (lgoal_autoapply_take _)
+      eapply (lgoal_autoapply_take (lweight_hole _))
   end
   : typeclass_instances.
 
@@ -392,22 +352,30 @@ Proof.
   rewrite H0; refine _.
 Defined.
 
-Ltac lweight_solve_count_holes x :=
-  (is_evar x; 1) ||
-  match x with
-  | (?xl + ?xr)%LWeight =>
-      lweight_solve_count_holes xl +
-      lweight_solve_count_holes xr
-  | _ => (has_evar x; fail 1) || 0
+Ltac lweight_solve_hole_check :=
+  match goal with
+  | [ |- _ = ?x ] =>
+      lazymatch x with
+      | context ctx [lweight_hole ?h] =>
+          idtac "found 1 hole";
+          lazymatch context ctx [0%LWeight] with
+          | context ctx2 [lweight_hole ?h2] =>
+              idtac "foud 2 hole";
+              fail "found 2 hole"
+          | _ => idtac
+          end
+      | _ => idtac
+      end
   end.
 
 Lemma test{E:LEnv} {A B C D:LType}
   (x:ltype A) (y:ltype B) (z:ltype (A -o B -o C -o D)) : LGoal (C -o D) (x+y+z).
 Proof.
   apply lhinted_init.
-  apply (lhinted_add 0 x).
+  (* apply (lhinted_add 0 x). *)
   eapply (lgoal_autoapply_getvalue z).
-  - let f := lweight_solve_count_holes (x + y + z)%LWeight in idtac f.
+  - lweight_solve_hole_check.
+    let f := lweight_solve_count_holes (x + y + z)%LWeight in idtac f.
     refine (_:x + y + z = 0 + x + y + z)%LWeight.
     apply (lweight_eqn _).
   - intros H; apply H.
