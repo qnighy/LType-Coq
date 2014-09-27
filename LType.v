@@ -13,7 +13,9 @@ Class LEnv := {
     LWeightPlus a (LWeightPlus b c) = LWeightPlus (LWeightPlus a b) c;
   LWeightZeroL a : LWeightPlus a LWeightZero = a;
   LWeightZeroR a : LWeightPlus LWeightZero a = a;
-  LWeightPlusComm a b : LWeightPlus a b = LWeightPlus b a
+  LWeightPlusComm a b : LWeightPlus a b = LWeightPlus b a;
+  LPole : Type;
+  lpoleweight : LPole -> LWeight
 }.
 
 Delimit Scope LWeight_scope with LWeight.
@@ -50,6 +52,12 @@ Class LWeightCastPlus{E:LEnv} (W V X:LWeight) := {
 Arguments LWeightCastPlus [E] W%LWeight V%LWeight X%LWeight.
 Arguments Build_LWeightCastPlus [E] [W] [V] [X] _.
 Arguments lweightcastplus_eqn [E] [W] [V] [X] [_].
+Class LWeightCastSelf{E:LEnv} (W V:LWeight) := {
+  lweightcastself_eqn : (V = W)%LWeight
+}.
+Arguments LWeightCastSelf [E] W%LWeight V%LWeight.
+Arguments Build_LWeightCastSelf [E] [W] [V] _.
+Arguments lweightcastself_eqn [E] [W] [V] [_].
 Class LWeightCastZero{E:LEnv} (W:LWeight) := {
   lweightcastzero_eqn : (0 = W)%LWeight
 }.
@@ -76,6 +84,14 @@ Proof.
   rewrite <-LWeightPlusAssoc.
   rewrite (@lweightminus_eqn _ _ _ _ H1).
   apply (@lweightminus_eqn _ _ _ _ H0).
+Defined.
+Instance LWeightMinus_VSelf{E:LEnv} {W X V V0:LWeight}
+    {H:LWeightCastSelf V V0}
+    {H0:LWeightMinus W V0 X}
+    : LWeightMinus W V X | 2.
+Proof.
+  rewrite <-(@lweightcastself_eqn _ _ _ H).
+  exact H0.
 Defined.
 Instance LWeightMinus_VZero{E:LEnv} {W V:LWeight}
     {H:LWeightCastZero V}
@@ -117,6 +133,14 @@ Proof.
   rewrite LWeightPlusComm.
   apply (@lweightminus1_eqn _ _ _ _ H1).
 Defined.
+Instance LWeightMinus1_WSelf{E:LEnv} {W V X W0:LWeight}
+    {H:LWeightCastSelf W W0}
+    {H0:LWeightMinus1 W0 V X}
+    : LWeightMinus1 W V X | 2.
+Proof.
+  rewrite <-(@lweightcastself_eqn _ _ _ H).
+  exact H0.
+Defined.
 Instance LWeightMinus1_self{E:LEnv} {W:LWeight}
     : LWeightMinus1 W W 0 | 0.
 Proof.
@@ -144,16 +168,65 @@ Proof.
   symmetry; apply lweightcastzero_eqn.
 Defined.
 
-Lemma test{E:LEnv} : forall(a b c d:LWeight),
-  exists e, ((c + a) + e = a + b + c)%LWeight.
+Class LWeightEquation{E:LEnv} (W V:LWeight) := {
+  lweight_eqn : W = V
+}.
+Arguments LWeightEquation [E] W V.
+Arguments Build_LWeightEquation [E] [W] [V] _.
+Arguments lweight_eqn [E] [W] [V] _.
+
+Instance LWeightEquationAuto{E:LEnv} {W V X:LWeight}
+    {mn:LWeightMinus W V X} {annihil:LWeightAnnihil X}
+    : LWeightEquation W V.
 Proof.
-  intros a b c d.
-  eexists.
-  apply lweightminus_eqn.
+  exists.
+  rewrite <-lweightminus_eqn.
+  rewrite (@lweightannihil_eqn _ _ annihil).
+  apply LWeightZeroL.
+Defined.
+
+Definition lweight_sum'{E:LEnv} :=
+  fix lweight_sum'(l:list LWeight) : LWeight :=
+  match l with
+  | nil => 0%LWeight
+  | cons h t => (lweight_sum' t + h)%LWeight
+  end.
+
+Definition lweight_sum{E:LEnv} : list LWeight -> LWeight := lweight_sum'.
+Lemma lweight_sum_unfold{E:LEnv} (l:list LWeight)
+    : lweight_sum l = lweight_sum' l.
+Proof.
+  reflexivity.
 Qed.
+Opaque lweight_sum.
 
-
-
+Class LWeightSumTranslate{E:LEnv} (l:list LWeight) (W:LWeight) := {
+  lweightsumtranslate_eqn : lweight_sum l = W
+}.
+Arguments LWeightSumTranslate [E] l%LWeight W%LWeight.
+Arguments Build_LWeightSumTranslate [E] [l] [W] _.
+Arguments lweightsumtranslate_eqn [E] [l] [W] [_].
+Instance LWeightSumTranslateSelf{E:LEnv} (l:list LWeight)
+    : LWeightSumTranslate l (lweight_sum l) := {|
+  lweightsumtranslate_eqn := eq_refl
+|}.
+Instance LWeightSumTranslateAnnihil{E:LEnv}
+    {W:LWeight} {annihil:LWeightAnnihil W}
+    : LWeightSumTranslate nil W.
+Proof.
+  exists.
+  rewrite lweight_sum_unfold.
+  symmetry; apply lweightannihil_eqn.
+Defined.
+Instance LWeightSumTranslateEquation{E:LEnv}
+    {W V:LWeight} {annihil:LWeightEquation W V}
+    : LWeightSumTranslate (cons W nil) V.
+Proof.
+  exists.
+  rewrite lweight_sum_unfold; simpl.
+  rewrite LWeightZeroR.
+  apply (lweight_eqn _).
+Defined.
 
 (*************************************************)
 (*        Definition of Linear Type              *)
@@ -162,7 +235,9 @@ Qed.
 Delimit Scope ILL_scope with ILL.
 Reserved Notation "'TT'".
 Reserved Notation "A '-o' B"
-  (at level 99, right associativity, y at level 200).
+  (at level 99, right associativity, B at level 200).
+Reserved Notation "! A"
+  (at level 30).
 
 Record LType{E:LEnv} := {
   ltype : Type;
@@ -180,7 +255,8 @@ Record LFun{E:LEnv} (A B:LType) := {
   lfun_val : ltype A -> ltype B;
   lfun_weight : @LWeight E;
   lfun_weight_eqn :
-    forall x, (lfun_weight + lweight x = lweight (lfun_val x))%LWeight
+    forall x : ltype A,
+      (lfun_weight + lweight x = lweight (lfun_val x))%LWeight
 }.
 Arguments LFun [E] A B.
 Arguments Build_LFun [E] [A] [B] _ _ _.
@@ -193,23 +269,62 @@ Definition LImpl{E:LEnv} (A B:LType):LType := {|
   lweight := @lfun_weight _ _ _
 |}.
 Notation "A -o B" := (LImpl A%ILL B%ILL) : ILL_scope.
+Coercion lfun_val : LFun >-> Funclass.
 
 Instance LImpl_weight_decompose{E:LEnv} (A B:LType)
     (f : ltype (A -o B)) (x : ltype A)
-    : LWeightCastPlus (lweight (lfun_val f x)) (lweight f) (lweight x).
+    : LWeightCastPlus (lweight (f x)) (lweight f) (lweight x).
 Proof.
   rewrite <-lfun_weight_eqn.
   auto with typeclass_instances.
 Defined.
 
 Record LGoal{E:LEnv} (T:LType) (W:LWeight) : Type := {
-  lgoal_proof : ltype T;
-  lgoal_weight : W = lweight lgoal_proof
+  lgoal_proof :> ltype T;
+  lgoal_weight_eqn : LWeightEquation W (lweight lgoal_proof)
 }.
 Arguments LGoal [E] T%ILL W%LWeight.
 Arguments Build_LGoal [E] [T] [W] _ _.
 Arguments lgoal_proof [E] [T] [W] _.
-Arguments lgoal_weight [E] [T] [W] _.
+Arguments lgoal_weight_eqn [E] [T] [W] _.
+Existing Instance lgoal_weight_eqn.
+
+(* Instance lgoal_weight_self{E:LEnv} {T:LType} {W:LWeight}
+    (H:LGoal T W) : LWeightCastSelf W (lweight (lgoal_proof H)).
+Proof.
+  exists.
+  symmetry; apply lweight_eqn, lgoal_weight_eqn.
+Defined. *)
+Instance lgoal_weight_self{E:LEnv} {T:LType} {W:LWeight}
+    (H:LGoal T W) : LWeightCastSelf (lweight (lgoal_proof H)) W.
+Proof.
+  exists.
+  apply lweight_eqn, lgoal_weight_eqn.
+Defined.
+
+Class LHinted{E:LEnv} (l:list (nat * LWeight)) (T:Type) := {
+  lhinted_val : T
+}.
+Arguments LHinted [E] l%LWeight T.
+Arguments Build_LHinted [E] [l] [T] _.
+Arguments lhinted_val [E] [l] [T] _.
+
+Instance lgoal_autoapply_self{E:LEnv} {T:LType} {l:list (nat * LWeight)}
+   {W:LWeight} (a:ltype T) : LHinted l (LGoal T (lweight a)).
+Proof.
+  exists.
+  refine {|
+    lgoal_proof := a
+  |}.
+Defined.
+
+Definition lgoal_autoapply_take{E:LEnv} {A B T:LType} {l:list (nat * LWeight)}
+  {W:LWeight}
+  (f:ltype (A -o B))
+  (
+  (H:LHinted l (LGoal T W)
+  : LHinted l (LGoal T (W + lweight a)%LWeight).
+    
 
 Notation "T [ 'using_hypotheses' W ]" :=
   (LGoal T%ILL W%LWeight)
@@ -223,9 +338,8 @@ Definition limpl_intro{E:LEnv} {A B:LType} {W:LWeight}
   lgoal_proof := {|
     lfun_val a := lgoal_proof (X a);
     lfun_weight := W;
-    lfun_weight_eqn a := lgoal_weight (X a)
-  |} : ltype (A -o B);
-  lgoal_weight := eq_refl
+    lfun_weight_eqn a := lweight_eqn _
+  |} : ltype (A -o B)
 |}.
 
 Definition limpl_revert{E:LEnv} {A B:LType} {W:LWeight} (x:ltype A)
@@ -233,13 +347,19 @@ Definition limpl_revert{E:LEnv} {A B:LType} {W:LWeight} (x:ltype A)
     (H : LGoal (A -o B) X) : LGoal B W.
 Proof.
   refine {|
-    lgoal_proof := lfun_val (lgoal_proof H) x
+    lgoal_proof := lfun_val (lgoal_proof H) x;
+    lgoal_weight_eqn := {| lweight_eqn := _ |}
   |}.
-  etransitivity; [symmetry; apply lweightminus_eqn|].
-  etransitivity; [|apply lfun_weight_eqn].
-  rewrite LWeightPlusComm.
-  f_equal.
-  apply (@lgoal_weight _ _ _ H).
+  rewrite <-lweightminus_eqn.
+  apply (lweight_eqn _).
+Defined.
+
+Definition linear_exact{E:LEnv} {A:LType} {W:LWeight}
+    (x:ltype A) {eqn:LWeightEquation W (lweight x)} : LGoal A W.
+Proof.
+  refine {|
+    lgoal_proof := x
+  |}.
 Defined.
 
 Definition limpl_applygoal{E:LEnv} {A B:LType} {W:LWeight}
@@ -250,22 +370,6 @@ Proof.
   refine {|
     lgoal_proof := lfun_val x (lgoal_proof a)
   |}.
-  etransitivity; [|apply lfun_weight_eqn].
-  etransitivity; [symmetry; apply lweightminus_eqn|].
-  f_equal.
-  apply lgoal_weight.
-Defined.
-
-Definition linear_exact{E:LEnv} {A:LType} {W:LWeight}
-    (x:ltype A) {X:LWeight} {mn:LWeightMinus W (lweight x) X}
-    {ann:LWeightAnnihil X} : LGoal A W.
-Proof.
-  refine {|
-    lgoal_proof := x
-  |}.
-  etransitivity; [symmetry; apply lweightminus_eqn|].
-  rewrite (@lweightannihil_eqn _ _ ann).
-  apply LWeightZeroL.
 Defined.
 
 Definition linear_cut{E:LEnv} (A:LType) {B:LType} {W:LWeight} (V:LWeight)
@@ -505,10 +609,66 @@ Grab Existential Variables.
   intros [].
 Defined.
 
+Record LOfcourseVal{E:LEnv} (A:LType) := {
+  lofcourseval : ltype A;
+  lofcourseval_nil : lweight lofcourseval = 0%LWeight
+}.
+Arguments LOfcourseVal [E] A%ILL.
+Arguments Build_LOfcourseVal [E] [A] _ _.
+Arguments lofcourseval [E] [A] _.
+Arguments lofcourseval_nil [E] [A] _.
+
+Definition LOfcourse{E:LEnv} (A:LType) : LType := {|
+  ltype := LOfcourseVal A;
+  lweight := fun _ => 0%LWeight
+|}.
+Notation "! A" := (LOfcourse A%ILL) : ILL_scope.
+
+Instance LOfcouse_weight_decompose{E:LEnv} (A:LType)
+    (x : ltype (!A))
+    : LWeightCastZero x.
+Proof.
+  exists.
+  reflexivity.
+Defined.
+
+Definition lofcourse_promote{E:LEnv} {A:LType}
+    {W:LWeight} {annihil:LWeightAnnihil W}
+    (H0 : LGoal A 0) : LGoal (!A) W.
+Proof.
+  refine {|
+    lgoal_proof := {|
+      lofcourseval := lgoal_proof H0;
+      lofcourseval_nil := eq_sym (lgoal_weight H0)
+    |} : ltype (!A)
+  |}.
+  apply lweightannihil_eqn.
+Defined.
+
+Definition lofcourse_derelict{E:LEnv} {A B:LType} {W:LWeight}
+    (a : ltype (!A))
+    (H0 : LGoal (A -o B) W) : LGoal B W.
+Proof.
+  refine {|
+    lgoal_proof := lfun_val (lgoal_proof H0) (lofcourseval a)
+  |}.
+  rewrite <-lfun_weight_eqn.
+  rewrite lofcourseval_nil, LWeightZeroL.
+  apply (@lgoal_weight _ _ _ H0).
+Defined.
+
 Ltac ll_cleanup :=
-  rewrite ?LWeightZeroL, ?LWeightZeroR;
+  repeat (
+    rewrite <-!lweightcastzero_eqn ||
+    rewrite !LWeightZeroL ||
+    rewrite !LWeightZeroR);
   repeat match goal with
-  | [ x : ltype _ |- _ ] => clear x
+  | [ x : ltype ?A |- _ ] =>
+      lazymatch A with
+      | LOfcourse _ => fail
+      | _ => idtac
+      end;
+      clear x
   end.
 
 Tactic Notation "introll" ident(x) :=
@@ -525,7 +685,7 @@ Tactic Notation "introll" ident(x0) ident(x1) ident(x2) ident(x3) ident(x4) :=
   introll x0; introll x1; introll x2; introll x3; introll x4.
 
 Tactic Notation "revertll" ident(x) :=
-  refine (limpl_revert x _); ll_cleanup.
+  refine (limpl_revert x _); clear x; ll_cleanup.
 
 Tactic Notation "applyll" constr(x) :=
   refine (limpl_applygoal x _); ll_cleanup.
@@ -541,7 +701,8 @@ Tactic Notation "splitll" "carrying" constr(V) :=
 Tactic Notation "splitll" :=
   (refine lone_split; ll_cleanup) ||
   (refine (lwith_split _ _); ll_cleanup) ||
-  (refine ltop_split).
+  (refine ltop_split) ||
+  (refine (lofcourse_promote _); ll_cleanup).
 
 Tactic Notation "leftll" :=
   refine (lplus_left _); ll_cleanup.
@@ -550,8 +711,6 @@ Tactic Notation "rightll" :=
 
 Tactic Notation "destructll" ident(x) "as" "[" ident(y) ident(z) "]" :=
   revertll x; refine (ltensor_uncurry _); introll y z.
-Tactic Notation "destructll" ident(x) :=
-  revertll x; refine (lone_uncurry _); ll_cleanup.
 
 Tactic Notation "destructll" ident(x) "as" "[" ident(y) "_" "]" :=
   revertll x; refine (lwith_uncurry_l _); introll y.
@@ -563,7 +722,16 @@ Tactic Notation "destructll" ident(x) "as" "[" ident(y) "|" ident(z) "]" :=
 Tactic Notation "destructll" ident(x) "as" "[" "]" :=
   revertll x; refine lzero_uncurry.
 
-
+Tactic Notation "destructll" ident(x) :=
+  (refine (lofcourse_derelict x _); clear x; introll x) ||
+  (revertll x; refine (lone_uncurry _); ll_cleanup) ||
+  let y := fresh in let z := fresh in
+  destructll x as [y z] ||
+  destructll x as [y _] ||
+  destructll x as [_ y] ||
+  destructll x as [y | y] ||
+  destructll x as [].
+  
 
 
 (*************************************************)
@@ -571,7 +739,7 @@ Tactic Notation "destructll" ident(x) "as" "[" "]" :=
 (*************************************************)
 
 Lemma CombinatorB{E:LEnv} (A B C:LType) :
-  (B -o C) -o (A -o B) -o (A -o C)
+  ((B -o C) -o (A -o B) -o (A -o C))
   [using_hypotheses 0].
 Proof.
   introll x.
@@ -583,7 +751,7 @@ Proof.
 Qed.
 
 Lemma CombinatorC{E:LEnv} (A B C:LType) :
-  (A -o B -o C) -o (B -o A -o C)
+  ((A -o B -o C) -o (B -o A -o C))
   [using_hypotheses 0].
 Proof.
   introll x.
@@ -594,7 +762,7 @@ Proof.
 Qed.
 
 Lemma TensorComm{E:LEnv} (A B:LType) :
-  A * B -o B * A
+  (A * B -o B * A)
   [using_hypotheses 0].
 Proof.
   introll x.
@@ -605,7 +773,7 @@ Proof.
 Qed.
 
 Lemma WithComm{E:LEnv} (A B:LType) :
-  A && B -o B && A
+  (A && B -o B && A)
   [using_hypotheses 0].
 Proof.
   introll x.
@@ -617,7 +785,7 @@ Proof.
 Qed.
 
 Lemma PlusComm{E:LEnv} (A B:LType) :
-  A + B -o B + A
+  (A + B -o B + A)
   [using_hypotheses 0].
 Proof.
   introll x.
@@ -626,4 +794,83 @@ Proof.
     exactll x.
   - leftll.
     exactll x.
+Qed.
+
+Lemma OfcDiggL{E:LEnv} (A:LType) :
+  ((!!A) -o !A)
+  [using_hypotheses 0].
+Proof.
+  introll x.
+  splitll.
+  destructll x.
+  destructll x.
+  exactll x.
+Qed.
+
+Lemma OfcDiggR{E:LEnv} (A:LType) :
+  ((!A) -o !!A)
+  [using_hypotheses 0].
+Proof.
+  introll x.
+  splitll.
+  splitll.
+  destructll x.
+  exactll x.
+Qed.
+
+Lemma TensorPlusCommL{E:LEnv} (A B C:LType) :
+  (A * B + A * C -o A * (B + C))
+  [using_hypotheses 0].
+Proof.
+  introll x.
+  destructll x as [x | x].
+  - destructll x as [x y].
+    splitll carrying x.
+    + exactll x.
+    + leftll.
+      exactll y.
+  - destructll x as [x y].
+    splitll carrying x.
+    + exactll x.
+    + rightll.
+      exactll y.
+Qed.
+
+Lemma TensorPlusCommR{E:LEnv} (A B C:LType) :
+  (A * (B + C) -o A * B + A * C)
+  [using_hypotheses 0].
+Proof.
+  introll x.
+  destructll x as [x y].
+  destructll y as [y | y].
+  - leftll.
+    splitll carrying x.
+    + exactll x.
+    + exactll y.
+  - rightll.
+    splitll carrying x.
+    + exactll x.
+    + exactll y.
+Qed.
+
+Lemma ExponentialLawL{E:LEnv} (A B:LType) :
+  (!(A && B) -o (!A) * (!B))
+  [using_hypotheses 0].
+Proof.
+  introll x.
+  splitll carrying 0%LWeight.
+  - splitll.
+    destructll x.
+    destructll x as [x _].
+    exactll x.
+  - splitll.
+    destructll x.
+    destructll x as [_ x].
+    exactll x.
+Qed.
+Lemma ExponentialLawR{E:LEnv} (A B:LType) :
+  ((!A) * (!B) -o !(A && B))
+  [using_hypotheses 0].
+Proof.
+  introll x.
 Qed.
