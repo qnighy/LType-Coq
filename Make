@@ -9,3 +9,4 @@ LOfcourse.v
 LForall.v
 LExists.v
 LType.v
+LType_utf8.v
