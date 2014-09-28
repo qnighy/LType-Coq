@@ -301,6 +301,9 @@ Tactic Notation "destructll" constr(x) "as" "[" ident(y) "]" :=
 Tactic Notation "destructll" constr(x) "as" "[" ident(y) ident(z) "]" :=
   revertll x; destructll_base; introsll y z.
 
+Tactic Notation "destructll" constr(x) "as" "[" ident(y) "|" ident(z) "]" :=
+  revertll x; destructll_base; [introsll y | introsll z].
+
 Tactic Notation "destructll" constr(x) "as" "[" ident(y) "_" "]" :=
   revertll x; destructll_left_base; introsll y.
 Tactic Notation "destructll" constr(x) "as" "[" "_" ident(z) "]" :=
