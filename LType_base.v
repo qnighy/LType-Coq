@@ -9,6 +9,8 @@ Require Import LWeight.
 Delimit Scope LL_scope with LL.
 Reserved Notation "A '-o' B"
   (at level 99, right associativity, B at level 200).
+Reserved Notation "A 'o-o' B"
+  (at level 95, no associativity).
 Reserved Notation "! A"
   (at level 30).
 Reserved Notation "'lforall' x .. y , p"

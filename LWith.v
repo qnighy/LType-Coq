@@ -25,6 +25,9 @@ Definition LTop{E:LEnv} : LType := {|
   lweight x := x
 |}.
 Notation "A && B" := (LWith A%LL B%LL) : LL_scope.
+Definition LIff{E:LEnv} (A B:LType) : LType :=
+  ((A -o B) && (B -o A))%LL.
+Notation "A o-o B" := (LIff A%LL B%LL) : LL_scope.
 
 Definition LWithConstructor{E:LEnv} (A B:LType) {W:LWeight} :
   LGoal A W -> LGoal B W -> LGoal (A && B) W.
