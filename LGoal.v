@@ -290,6 +290,8 @@ Tactic Notation "existsll" constr(x) := existsll_base x.
 Ltac destructll_base := fail "Destructor not found".
 Ltac destructll_left_base := fail "Destructor not found".
 Ltac destructll_right_base := fail "Destructor not found".
+Ltac clonell_base := fail "Destructor not found".
+Ltac clearll_base := fail "Destructor not found".
 
 Tactic Notation "destructll" constr(x) :=
   (* TODO stop introsll at an appropriate point *)
@@ -308,3 +310,10 @@ Tactic Notation "destructll" constr(x) "as" "[" ident(y) "_" "]" :=
   revertll x; destructll_left_base; introsll y.
 Tactic Notation "destructll" constr(x) "as" "[" "_" ident(z) "]" :=
   revertll x; destructll_right_base; introsll z.
+
+Tactic Notation "clonell" constr(x) "as" "[" ident(y) ident(z) "]" :=
+  revertll x; clonell_base; introsll y z.
+Tactic Notation "clonell" constr(x) "into" ident(y) :=
+  revertll x; clonell_base; introsll x y.
+Tactic Notation "clearll" constr(x) :=
+  revertll x; clearll_base.
