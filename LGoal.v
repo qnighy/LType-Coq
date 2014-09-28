@@ -23,6 +23,23 @@ Proof.
   apply lweight_eqn, lgoal_weight_eqn.
 Defined.
 
+Class QuantifiedLType{E:LEnv} {T:Type} {TT:LType} (f:T) := {
+  ltype_unfold_quantifier : ltype TT
+}.
+Arguments QuantifiedLType [E] [T] [TT] f.
+Arguments Build_QuantifiedLType [E] [T] [TT] [f] _.
+Arguments ltype_unfold_quantifier [E] [T] [TT] f [_].
+Instance QuantifiedLTypeSelf{E:LEnv} {TT:LType} (f:ltype TT) :
+  @QuantifiedLType _ (ltype TT) TT f := {|
+  ltype_unfold_quantifier := f
+|}.
+Instance QuantifiedLTypeForall{E:LEnv} {A:Type} {T:A->Type} {TT:LType}
+    (f:forall a, T a)
+    {a:A} {H:@QuantifiedLType E (T a) TT (f a)}
+    : @QuantifiedLType E (forall a, T a) TT f := {|
+  ltype_unfold_quantifier := ltype_unfold_quantifier (f a)
+|}.
+
 Fixpoint implication_list(T:list Type) (G:Type) : Type :=
   match T with
   | nil => G
@@ -113,7 +130,7 @@ Proof.
 Defined.
 
 Ltac lweight_solve_equation :=
-  match goal with
+  lazymatch goal with
   | [ |- ?W = ?V ] =>
       lazymatch V with
       | context ctx [lweight_hole ?h] =>
@@ -174,7 +191,7 @@ Ltac ll_cleanup :=
 
 Ltac applyll_base f :=
   lhinted_conditional_init;
-  eapply (lgoal_autoapply_getvalue f);
+  eapply (lgoal_autoapply_getvalue (ltype_unfold_quantifier f));
     [ lweight_solve_equation
     | rewrite ?lweight_hole_unfold;
       let H := fresh "H" in
@@ -214,7 +231,7 @@ Defined.
 
 Notation "'ILL' |- T" := (LGoal T%LL 0%LWeight) (at level 200)
     : LL_goal_scope.
-Notation "'ILL' |- T [ 'using_hypotheses' W ]" :=
+Notation "'ILL' |- T [ 'using_hypotheses' W  ]" :=
     (LGoal T%LL W%LWeight) (at level 200) : LL_goal_scope.
 
 
@@ -234,8 +251,8 @@ Tactic Notation "introsll" ident(x0) ident(x1) ident(x2) ident(x3) :=
 Tactic Notation "introsll" ident(x0) ident(x1) ident(x2) ident(x3) ident(x4) :=
   introll x0; introll x1; introll x2; introll x3; introll x4.
 
-Tactic Notation "revertll" ident(x) :=
-  refine (limpl_revert x _); clear x; ll_cleanup.
+Tactic Notation "revertll" constr(x) :=
+  refine (limpl_revert x _); ll_cleanup.
 
 Tactic Notation "applyll" constr(x) :=
   applyll_base x.
@@ -258,3 +275,58 @@ Proof.
   applyll y.
 Defined.
 Local Close Scope LL_goal_scope.
+
+Class LinearConstructor{E:LEnv} (n m:nat) (TT:LType) {T:Type} := {
+  linear_constructor : T
+}.
+Arguments LinearConstructor [E] n m TT%LL [T].
+Arguments Build_LinearConstructor [E] n m TT%LL [T] _.
+Arguments linear_constructor [E] n m TT%LL [T] [_].
+
+Instance LinearConstructor_Wildcard{E:LEnv} (n m:nat) (TT:LType) {T:Type}
+    (H:@LinearConstructor _ n (S m) TT T)
+    :@LinearConstructor _ n 0 TT T := {|
+  linear_constructor := linear_constructor n (S m) TT
+|}.
+
+Ltac constructorll_base_int idx num :=
+  lazymatch goal with
+  | [ |- LGoal ?G _ ] =>
+      applyll_base (linear_constructor idx num G)
+  | [ |- LHinted _ (LGoal ?G _) ] =>
+      applyll_base (linear_constructor idx num G)
+  end.
+
+Ltac constructorll_base idx num :=
+  constructorll_base_int idx num.
+
+Tactic Notation "splitll" := constructorll_base 1 1.
+Tactic Notation "leftll" := constructorll_base 1 2.
+Tactic Notation "rightll" := constructorll_base 2 2.
+Tactic Notation "constructorll" constr(x) := constructorll_base x 0.
+
+Class LinearDestructor{E:LEnv} (n m:nat) (TT:LType) {T:Type} := {
+  linear_destructor : T
+}.
+Arguments LinearDestructor [E] n m TT%LL [T].
+Arguments Build_LinearDestructor [E] n m TT%LL [T] _.
+Arguments linear_destructor [E] n m TT%LL [T] [_].
+
+Ltac destructorll_base_int idx num :=
+  lazymatch goal with
+  | [ |- LGoal ?G _ ] =>
+      applyll_base (linear_destructor idx num G)
+  end.
+
+Ltac destructorll_base idx num :=
+  destructorll_base_int idx num.
+
+Tactic Notation "destructll" constr(x) :=
+  (* TODO stop introsll at an appropriate point *)
+  revertll x; destructorll_base 1 1; introsll.
+Tactic Notation "destructll" constr(x) "as" "[" "]" :=
+  revertll x; destructorll_base 1 1.
+Tactic Notation "destructll" constr(x) "as" "[" ident(y) "]" :=
+  revertll x; destructorll_base 1 1; introsll y.
+Tactic Notation "destructll" constr(x) "as" "[" ident(y) ident(z) "]" :=
+  revertll x; destructorll_base 1 1; introsll y z.
