@@ -276,57 +276,25 @@ Proof.
 Defined.
 Local Close Scope LL_goal_scope.
 
-Class LinearConstructor{E:LEnv} (n m:nat) (TT:LType) {T:Type} := {
-  linear_constructor : T
-}.
-Arguments LinearConstructor [E] n m TT%LL [T].
-Arguments Build_LinearConstructor [E] n m TT%LL [T] _.
-Arguments linear_constructor [E] n m TT%LL [T] [_].
+Ltac splitll_base := fail "Constructor not found".
+Ltac leftll_base := fail "Constructor not found".
+Ltac rightll_base := fail "Constructor not found".
+Ltac existsll_base x := fail "Constructor not found".
 
-Instance LinearConstructor_Wildcard{E:LEnv} (n m:nat) (TT:LType) {T:Type}
-    (H:@LinearConstructor _ n (S m) TT T)
-    :@LinearConstructor _ n 0 TT T := {|
-  linear_constructor := linear_constructor n (S m) TT
-|}.
+Tactic Notation "splitll" := splitll_base.
+Tactic Notation "leftll" := leftll_base.
+Tactic Notation "rightll" := rightll_base.
+Tactic Notation "existsll" := splitll_base.
+Tactic Notation "existsll" constr(x) := existsll_base x.
 
-Ltac constructorll_base_int idx num :=
-  lazymatch goal with
-  | [ |- LGoal ?G _ ] =>
-      applyll_base (linear_constructor idx num G)
-  | [ |- LHinted _ (LGoal ?G _) ] =>
-      applyll_base (linear_constructor idx num G)
-  end.
-
-Ltac constructorll_base idx num :=
-  constructorll_base_int idx num.
-
-Tactic Notation "splitll" := constructorll_base 1 1.
-Tactic Notation "leftll" := constructorll_base 1 2.
-Tactic Notation "rightll" := constructorll_base 2 2.
-Tactic Notation "constructorll" constr(x) := constructorll_base x 0.
-
-Class LinearDestructor{E:LEnv} (n m:nat) (TT:LType) {T:Type} := {
-  linear_destructor : T
-}.
-Arguments LinearDestructor [E] n m TT%LL [T].
-Arguments Build_LinearDestructor [E] n m TT%LL [T] _.
-Arguments linear_destructor [E] n m TT%LL [T] [_].
-
-Ltac destructorll_base_int idx num :=
-  lazymatch goal with
-  | [ |- LGoal ?G _ ] =>
-      applyll_base (linear_destructor idx num G)
-  end.
-
-Ltac destructorll_base idx num :=
-  destructorll_base_int idx num.
+Ltac destructll_base := fail "Destructor not found".
 
 Tactic Notation "destructll" constr(x) :=
   (* TODO stop introsll at an appropriate point *)
-  revertll x; destructorll_base 1 1; introsll.
+  revertll x; destructll_base; introsll.
 Tactic Notation "destructll" constr(x) "as" "[" "]" :=
-  revertll x; destructorll_base 1 1.
+  revertll x; destructll_base.
 Tactic Notation "destructll" constr(x) "as" "[" ident(y) "]" :=
-  revertll x; destructorll_base 1 1; introsll y.
+  revertll x; destructll_base; introsll y.
 Tactic Notation "destructll" constr(x) "as" "[" ident(y) ident(z) "]" :=
-  revertll x; destructorll_base 1 1; introsll y z.
+  revertll x; destructll_base; introsll y z.

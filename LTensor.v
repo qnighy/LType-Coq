@@ -69,27 +69,16 @@ Grab Existential Variables.
   intros x; refine (lweight_eqn _).
 Defined.
 
-Instance LTensorConstructorInstance{E:LEnv} {A B:LType} :
-  @LinearConstructor _ 1 1 (A * B) (ltype (A -o B -o A * B)).
-Proof.
-  exists; apply LTensorConstructor.
-Defined.
-Instance LOneConstructorInstance{E:LEnv} :
-  @LinearConstructor _ 1 1 1 (ltype 1).
-Proof.
-  exists; apply LOneConstructor.
-Defined.
-Instance LTensorDestructorInstance{E:LEnv} {A B C:LType} :
-  @LinearDestructor _ 1 1 (A * B -o C)
-                          (ltype ((A -o B -o C) -o (A * B -o C))).
-Proof.
-  exists; apply LTensorDestructor.
-Defined.
-Instance LOneDestructorInstance{E:LEnv} {A:LType} :
-  @LinearDestructor _ 1 1 (1 -o A) (ltype (A -o 1 -o A)).
-Proof.
-  exists; apply LOneDestructor.
-Defined.
+Local Ltac splitll_base_old := splitll_base.
+Local Ltac destructll_base_old := destructll_base.
+Ltac splitll_base ::=
+  applyll LTensorConstructor ||
+  applyll LOneConstructor ||
+  splitll_base_old.
+Ltac destructll_base ::=
+  applyll LTensorDestructor ||
+  applyll LOneDestructor ||
+  destructll_base_old.
 
 Local Open Scope LL_goal_scope.
 Example TensorComm{E:LEnv} (A B:LType) :
