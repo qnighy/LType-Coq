@@ -337,7 +337,7 @@ Definition lhinted_add{E:LEnv} {G:Type} {l:list (nat * LWeight)}
 Definition lgoal_autoapply_getvalue{E:LEnv} {l:list (nat * LWeight)}
     {T:LType} {W:LWeight} {X:LWeight} {A:LType} (a:ltype A)
     {Tl:list Type}
-    {H:LHintedApp 0 l Tl (LGoal T (X + a))}
+    {H:LHintedApp 1 l Tl (LGoal T (X + a))}
     (H0:(W = X + a)%LWeight)
     (Next:implication_list Tl (LGoal T W) -> LGoal T W)
     : LHinted l (LGoal T W).
@@ -352,49 +352,68 @@ Proof.
   rewrite H0; refine _.
 Defined.
 
-Ltac lweight_solve_hole_check :=
+Ltac lweight_solve_equation :=
   match goal with
-  | [ |- _ = ?x ] =>
-      lazymatch x with
+  | [ |- ?W = ?V ] =>
+      lazymatch V with
       | context ctx [lweight_hole ?h] =>
-          idtac "found 1 hole";
+          (* idtac "found 1 or more hole"; *)
           lazymatch context ctx [0%LWeight] with
           | context ctx2 [lweight_hole ?h2] =>
-              idtac "foud 2 hole";
-              fail "found 2 hole"
-          | _ => idtac
+              (* idtac "found 2 or more hole"; *)
+              fail "Linear application failed: "
+                   "there are more than one subgoal "
+                   "and I can't determine where to "
+                   "carry hypotheses. "
+                   "Use 'carrying' tacticals to "
+                   "specify that."
+          | _ =>
+              (* idtac "found 1 hole"; *)
+              (
+                let VC := context ctx [0%LWeight] in
+                let H := fresh "H" in
+                assert (H := _ : LWeightMinus W VC h);
+                rewrite lweight_hole_unfold;
+                refine (lweight_eqn _);
+                fail
+              ) ||
+              fail "Linear application failed: "
+                   "cannot solve a weight equation."
           end
-      | _ => idtac
+      | _ =>
+          (* idtac "found no hole"; *)
+          refine (lweight_eqn _);
+          fail "Linear application failed: "
+               "cannot solve a weight equation."
       end
   end.
+
+Ltac lhinted_conditional_init :=
+  lazymatch goal with
+  | [ |- LHinted _ _ ] => idtac
+  | _ => apply lhinted_init
+  end.
+
+Ltac lhinted_add n W :=
+  lhinted_conditional_init;
+  apply (lhinted_add n W).
+
+Tactic Notation (at level 2)
+    tactic2(t) "carrying" constr(W) "into" constr(n) :=
+  lhinted_add n (W%LWeight);
+  t.
 
 Lemma test{E:LEnv} {A B C D:LType}
   (x:ltype A) (y:ltype B) (z:ltype (A -o B -o C -o D)) : LGoal (C -o D) (x+y+z).
 Proof.
-  apply lhinted_init.
-  (* apply (lhinted_add 0 x). *)
-  eapply (lgoal_autoapply_getvalue z).
-  - lweight_solve_hole_check.
-    let f := lweight_solve_count_holes (x + y + z)%LWeight in idtac f.
-    refine (_:x + y + z = 0 + x + y + z)%LWeight.
-    apply (lweight_eqn _).
-  - intros H; apply H.
-  assert (H := lgoal_autoapply_getvalue nil (C -o D)%ILL (x + y + z)%LWeight z).
-  lazymatch goal with
-  | [ |- LGoal ?T ?W ] =>
-      let Tl := fresh Tl in
-      evar (Tl : list Type);
-      let X := fresh X in
-      evar (X : LWeight);
-      let H := fresh H in
-      assert (H : @LHintedApp E 0 nil Tl (LGoal T (X+z)));
-        [unfold Tl,X in *; refine _; eapply _|]
-  end.
-  admit.
-  admit.
-  refine _.
-  - eapply lgoal_autoapply_take.
+  eapply (lgoal_autoapply_getvalue z)
+    carrying x into 1.
+  - lweight_solve_equation.
+  - rewrite ?lweight_hole_unfold; intros H; apply H.
+    + refine {| lgoal_proof := x |}.
+    + refine {| lgoal_proof := y |}.
 Qed.
+
 
 Class LHinted{E:LEnv} (n:nat) (l:list (nat * LWeight))
     (W V:LWeight) (G:Type) {G':Type} := {
