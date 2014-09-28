@@ -235,7 +235,8 @@ Notation "'ILL' |- T [ 'using_hypotheses' W  ]" :=
     (LGoal T%LL W%LWeight) (at level 200) : LL_goal_scope.
 
 Ltac introll_base_limpl x :=
-  refine (limpl_intro _); intro x.
+  (refine (limpl_intro _); intro x) ||
+  intro x.
 
 Ltac introll_base x :=
   introll_base_limpl x ||
