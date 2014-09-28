@@ -138,12 +138,12 @@ Ltac lweight_solve_equation :=
           lazymatch context ctx [0%LWeight] with
           | context ctx2 [lweight_hole ?h2] =>
               (* idtac "found 2 or more hole"; *)
-              fail "Linear application failed: "
-                   "there are more than one subgoal "
-                   "and I can't determine where to "
-                   "carry hypotheses. "
-                   "Use 'carrying' tacticals to "
-                   "specify that."
+              fail 2 "Linear application failed: "
+                     "there are more than one subgoal "
+                     "and I can't determine where to "
+                     "carry hypotheses. "
+                     "Use 'carrying' tacticals to "
+                     "specify that."
           | _ =>
               (* idtac "found 1 hole"; *)
               (
@@ -154,14 +154,14 @@ Ltac lweight_solve_equation :=
                 refine (lweight_eqn _);
                 fail
               ) ||
-              fail "Linear application failed: "
-                   "cannot solve a weight equation."
+              fail 2 "Linear application failed: "
+                     "cannot solve a weight equation."
           end
       | _ =>
           (* idtac "found no hole"; *)
           refine (lweight_eqn _);
-          fail "Linear application failed: "
-               "cannot solve a weight equation."
+          fail 2 "Linear application failed: "
+                 "cannot solve a weight equation."
       end
   end.
 
@@ -180,6 +180,8 @@ Tactic Notation (at level 2)
   lhinted_add n (W%LWeight);
   t.
 
+Ltac ll_fold_weights := idtac.
+
 Ltac ll_cleanup :=
   repeat (
     rewrite <-!lweightcastzero_eqn ||
@@ -187,7 +189,8 @@ Ltac ll_cleanup :=
     rewrite !LWeightZeroR);
   repeat match goal with
   | [ x : ltype ?A |- _ ] => clear x
-  end.
+  end;
+  ll_fold_weights.
 
 Ltac applyll_base f :=
   lhinted_conditional_init;
@@ -288,11 +291,11 @@ Ltac leftll_base := fail "Constructor not found".
 Ltac rightll_base := fail "Constructor not found".
 Ltac existsll_base x := fail "Constructor not found".
 
-Tactic Notation "splitll" := splitll_base.
-Tactic Notation "leftll" := leftll_base.
-Tactic Notation "rightll" := rightll_base.
-Tactic Notation "existsll" := splitll_base.
-Tactic Notation "existsll" constr(x) := existsll_base x.
+Tactic Notation "splitll" := splitll_base; ll_cleanup.
+Tactic Notation "leftll" := leftll_base; ll_cleanup.
+Tactic Notation "rightll" := rightll_base; ll_cleanup.
+Tactic Notation "existsll" := splitll_base; ll_cleanup.
+Tactic Notation "existsll" constr(x) := existsll_base x; ll_cleanup.
 
 Ltac destructll_base := fail "Destructor not found".
 Ltac destructll_left_base := fail "Destructor not found".
@@ -304,7 +307,7 @@ Tactic Notation "destructll" constr(x) :=
   (* TODO stop introsll at an appropriate point *)
   revertll x; destructll_base; introsll.
 Tactic Notation "destructll" constr(x) "as" "[" "]" :=
-  revertll x; destructll_base.
+  revertll x; destructll_base; ll_cleanup.
 Tactic Notation "destructll" constr(x) "as" "[" ident(y) "]" :=
   revertll x; destructll_base; introsll y.
 Tactic Notation "destructll" constr(x) "as" "[" ident(y) ident(z) "]" :=
@@ -323,4 +326,4 @@ Tactic Notation "clonell" constr(x) "as" "[" ident(y) ident(z) "]" :=
 Tactic Notation "clonell" constr(x) "into" ident(y) :=
   revertll x; clonell_base; introsll x y.
 Tactic Notation "clearll" constr(x) :=
-  revertll x; clearll_base.
+  revertll x; clearll_base; ll_cleanup.

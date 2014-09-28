@@ -1,3 +1,4 @@
+-R . LType
 LWeight.v
 LType_base.v
 LGoal.v
@@ -7,3 +8,4 @@ LPlus.v
 LOfcourse.v
 LForall.v
 LExists.v
+LType.v

@@ -69,13 +69,26 @@ Grab Existential Variables.
   intros x; refine (lweight_eqn _).
 Defined.
 
+Ltac splitll_base_tensor :=
+  lazymatch goal with
+  | [ |- LGoal (_ * _) _ ] => applyll LTensorConstructor
+  | [ |- LHinted _ (LGoal (_ * _) _) ] => applyll LTensorConstructor
+  | [ |- LGoal 1 _ ] => applyll LOneConstructor
+  | [ |- LHinted _ (LGoal 1 _) ] => applyll LOneConstructor
+  end.
+Ltac destructll_base_tensor :=
+  lazymatch goal with
+  | [ |- LGoal (_ * _ -o _) _ ] => applyll LTensorDestructor
+  | [ |- LHinted _ (LGoal (_ * _ -o _) _) ] => applyll LTensorDestructor
+  | [ |- LGoal (1 -o _) _ ] => applyll LOneDestructor
+  | [ |- LHinted _ (LGoal (1 -o _) _) ] => applyll LOneDestructor
+  end.
+
 Local Ltac splitll_base ::=
-  applyll LTensorConstructor ||
-  applyll LOneConstructor ||
+  splitll_base_tensor ||
   fail "Constructor not found".
 Local Ltac destructll_base ::=
-  applyll LTensorDestructor ||
-  applyll LOneDestructor ||
+  destructll_base_tensor ||
   fail "Destructor not found".
 
 Local Open Scope LL_goal_scope.
