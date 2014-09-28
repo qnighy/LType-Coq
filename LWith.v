@@ -77,6 +77,51 @@ Grab Existential Variables.
   refine (lweight_eqn _).
 Defined.
 
+Definition LWithFst{E:LEnv} {A B:LType} : ltype (A && B -o A).
+Proof.
+  refine {|
+    lfun_val := fun(p:ltype (A && B)) => lwithval_fst p;
+    lfun_weight := 0%LWeight
+  |}.
+  intros x; refine (lweight_eqn _).
+Defined.
+Definition LWithSnd{E:LEnv} {A B:LType} : ltype (A && B -o B).
+Proof.
+  refine {|
+    lfun_val := fun(p:ltype (A && B)) => lwithval_snd p;
+    lfun_weight := 0%LWeight
+  |}.
+  intros x; rewrite <-lwithval_weight_eqn; refine (lweight_eqn _).
+Defined.
+
+Instance lgoal_autoapply_with_fst{E:LEnv} {T:Type} {A B C:LType}
+  {n:nat} {l:list (nat * LWeight)} {W:LWeight}
+  {f:ltype (A && B)}
+  {Impls:list Type}
+  {H: LHintedApp n l Impls (LGoal C (W + lweight (LWithFst f))%LWeight)}
+  : LHintedApp n l Impls (LGoal C (W + lweight f)%LWeight).
+Proof.
+  exists.
+  destruct H as [H].
+  revert H; apply implication_list_map; intros H.
+  refine {|
+    lgoal_proof := lgoal_proof H
+  |}.
+Defined.
+Instance lgoal_autoapply_with_snd{E:LEnv} {T:Type} {A B C:LType}
+  {n:nat} {l:list (nat * LWeight)} {W:LWeight}
+  {f:ltype (A && B)}
+  {Impls:list Type}
+  {H: LHintedApp n l Impls (LGoal C (W + lweight (LWithSnd f))%LWeight)}
+  : LHintedApp n l Impls (LGoal C (W + lweight f)%LWeight).
+Proof.
+  exists.
+  destruct H as [H].
+  revert H; apply implication_list_map; intros H.
+  refine {|
+    lgoal_proof := lgoal_proof H
+  |}.
+Defined.
 
 Local Ltac splitll_base ::=
   apply LWithConstructor ||
