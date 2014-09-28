@@ -199,8 +199,7 @@ Opaque lweight_hole.
 (*        Definition of Linear Type              *)
 (*************************************************)
 
-Delimit Scope ILL_scope with ILL.
-Reserved Notation "'TT'".
+Delimit Scope LL_scope with LL.
 Reserved Notation "A '-o' B"
   (at level 99, right associativity, B at level 200).
 Reserved Notation "! A"
@@ -212,7 +211,7 @@ Record LType{E:LEnv} := {
 }.
 Arguments LType [E].
 Arguments Build_LType [E] _ _.
-Arguments ltype [E] _%ILL.
+Arguments ltype [E] _%LL.
 Arguments lweight [E] [_] _.
 
 Coercion lweight : ltype >-> LWeight.
@@ -235,7 +234,7 @@ Definition LImpl{E:LEnv} (A B:LType):LType := {|
   ltype := LFun A B;
   lweight := @lfun_weight _ _ _
 |}.
-Notation "A -o B" := (LImpl A%ILL B%ILL) : ILL_scope.
+Notation "A -o B" := (LImpl A%LL B%LL) : LL_scope.
 Coercion lfun_val : LFun >-> Funclass.
 
 Instance LImpl_weight_decompose{E:LEnv} (A B:LType)
@@ -250,7 +249,7 @@ Record LGoal{E:LEnv} (T:LType) (W:LWeight) : Type := {
   lgoal_proof :> ltype T;
   lgoal_weight_eqn : LWeightEquation W (lweight lgoal_proof)
 }.
-Arguments LGoal [E] T%ILL W%LWeight.
+Arguments LGoal [E] T%LL W%LWeight.
 Arguments Build_LGoal [E] [T] [W] _ _.
 Arguments lgoal_proof [E] [T] [W] _.
 Arguments lgoal_weight_eqn [E] [T] [W] _.
@@ -403,129 +402,32 @@ Tactic Notation (at level 2)
   lhinted_add n (W%LWeight);
   t.
 
-Lemma test{E:LEnv} {A B C D:LType}
-  (x:ltype A) (y:ltype B) (z:ltype (A -o B -o C -o D)) : LGoal (C -o D) (x+y+z).
-Proof.
-  eapply (lgoal_autoapply_getvalue z)
-    carrying x into 1.
-  - lweight_solve_equation.
-  - rewrite ?lweight_hole_unfold; intros H; apply H.
-    + refine {| lgoal_proof := x |}.
-    + refine {| lgoal_proof := y |}.
-Qed.
-
-
-Class LHinted{E:LEnv} (n:nat) (l:list (nat * LWeight))
-    (W V:LWeight) (G:Type) {G':Type} := {
-  lhinted_val : W = V -> G'
-}.
-Arguments LHinted [E] n l%LWeight W%LWeight V%LWeight G [G'].
-Arguments Build_LHinted [E] n l%LWeight W%LWeight V%LWeight [G] [G'] _.
-Arguments lhinted_val [E] [n] [l] [W] [V] [G] [G'] _ _.
-
-Instance lgoal_autoapply_self{E:LEnv} {T:LType} {n:nat}
-   {l:list (nat * LWeight)} {W V:LWeight} {a:ltype T}
-   : @LHinted _ n l W V (LGoal T (0 + lweight a)%LWeight)
-                        (LGoal T (0 + lweight a)%LWeight).
-Proof.
-  split.
-  intros H.
-  refine {|
-    lgoal_proof := a
-  |}.
-Defined.
-
-Definition lgoal_autoapply_take{E:LEnv} {A B T:LType} {n:nat}
-  {l:list (nat * LWeight)} {W eqW eqV:LWeight} (HintWeight:LWeight)
-  {f:ltype (A -o B)}
-  {G':LGoal A HintWeight -> Type}
-  {H:forall a:LGoal A HintWeight,
-       @LHinted _ (S n) l eqW eqV (LGoal T (W + lweight (f a))%LWeight) (G' a)}
-  : @LHinted _ n l eqW eqV (LGoal T (W + HintWeight + lweight f)%LWeight)
-                           (forall a:LGoal A HintWeight, G' a).
-Proof.
-  exists.
-  intros Heq a.
-  apply (lhinted_val (H a)), Heq.
-Defined.
-
-Hint Extern 1 (LHinted ?n ?l (LGoal ?T (_ + lweight ?f)%LWeight)) =>
-  lazymatch l with
-  | context ctx [(n,?W)] =>
-      idtac "weight is " W;
-      eapply (lgoal_autoapply_take W)
-  | _ =>
-      idtac "hint not found";
-      eapply (lgoal_autoapply_take _)
-  end
-  : typeclass_instances.
-
-(*
-Definition lgoal_autoapply_prepare{E:LEnv} {A T:LType}
-  (l:list (nat * LWeight)) {W X:LWeight}
-  (a:ltype A) {G':Type}
-  (H0:@LHinted _ 0 l W (X+lweight a)
-                       (LGoal T (X+lweight a)) G')
-  : LGoal T W.
-Proof.
-  refine {|
-    lgoal_proof := lhinted_val H0;
-    lgoal_weight_eqn := _
-  |}.
-  rewrite H.
-  refine _.
-Defined.
-*)
-
-Lemma test{E:LEnv} {A B C D:LType}
-  (x:ltype A) (y:ltype B) (z:ltype (A -o B -o C -o D)) : LGoal (C -o D) (x+y+z).
-Proof.
-  lazymatch goal with
-  | [ |- LGoal ?T ?W ] =>
-      let G' := fresh G' in
-      evar (G' : Type);
-      let X := fresh X in
-      evar (X : LWeight);
-      let H := fresh H in
-      assert (H : @LHinted _ 0 nil (x + y + z) (X+z) (LGoal T (X+z)) G');
-        unfold G' in *; clear G';
-        unfold X in *; clear X
+Ltac ll_cleanup :=
+  repeat (
+    rewrite <-!lweightcastzero_eqn ||
+    rewrite !LWeightZeroL ||
+    rewrite !LWeightZeroR);
+  repeat match goal with
+  | [ x : ltype ?A |- _ ] => clear x
   end.
-  - eapply lgoal_autoapply_take.
-    intros a.
-    eapply (@lgoal_autoapply_take E B (C -o D)%ILL (C -o D)%ILL
-                                  1 nil).
-    intros b.
-    eapply lgoal_autoapply_self.
-  - destruct H as [H].
-  apply lhinted_val with
-    (n:=0) (l:=((1, (x + y)%LWeight) :: nil)%list)
-    (G:=LGoal (C -o D) (x + y + z)).
-  eapply (lgoal_autoapply_prepare z).
-  - eapply (@lgoal_autoapply_take).
-    
-  -
-  reflexivity.
-  - eapply (lgoal_autoapply_take _).
-    refine _.
-  eapply (lgoal_autoapply_prepare z _).
-  refine (_:(x + y + z)%LWeight = (0 + (x + y) + 0 + z)%LWeight).
-  apply (lweight_eqn _).
-  instantiate.
-  instantiate.
-  - eapply (lgoal_autoapply_take (x + y)%LWeight).
-    eapply (lgoal_autoapply_take _).
-    apply lgoal_autoapply_self.
-    refine _.
-    eapply (lgoal_autoapply_take (x + y)%LWeight).
-  -
-Defined.
 
-Notation "T [ 'using_hypotheses' W ]" :=
-  (LGoal T%ILL W%LWeight)
-  (at level 100,
-   no associativity,
-   format "'[' T '//' [ 'using_hypotheses'  W ] ']'").
+Ltac applyll_base f :=
+  lhinted_conditional_init;
+  eapply (lgoal_autoapply_getvalue f);
+    [ lweight_solve_equation
+    | rewrite ?lweight_hole_unfold;
+      let H := fresh "H" in
+      intros H; apply H; clear H;
+      ll_cleanup ].
+
+Lemma test{E:LEnv} {A B C D:LType}
+  (x:ltype A) (y:ltype B) (z:ltype (A -o B -o C -o D)) : LGoal (C -o D) (x+y+z).
+Proof.
+  (applyll_base z)
+    carrying x into 1.
+  - refine {| lgoal_proof := x |}.
+  - refine {| lgoal_proof := y |}.
+Qed.
 
 Definition limpl_intro{E:LEnv} {A B:LType} {W:LWeight}
     (X : forall a : ltype A, LGoal B (W + lweight a)) :
@@ -548,6 +450,52 @@ Proof.
   rewrite <-lweightminus_eqn.
   apply (lweight_eqn _).
 Defined.
+
+Notation "'ILL' |- T" := (LGoal T%LL 0%LWeight) (at level 200)
+    : LL_goal_scope.
+Notation "'ILL' |- T [ using_hypotheses W ]" :=
+    (LGoal T%LL W%LWeight) (at level 200) : LL_goal_scope.
+
+
+Tactic Notation "introll" ident(x) :=
+  refine (limpl_intro _); intro x; ll_cleanup.
+Ltac introsll_auto :=
+  let x := fresh "H" in introll x; try introsll_auto.
+Tactic Notation "introsll" := introsll_auto.
+Tactic Notation "introsll" ident(x0) :=
+  introll x0.
+Tactic Notation "introsll" ident(x0) ident(x1) :=
+  introll x0; introll x1.
+Tactic Notation "introsll" ident(x0) ident(x1) ident(x2) :=
+  introll x0; introll x1; introll x2.
+Tactic Notation "introsll" ident(x0) ident(x1) ident(x2) ident(x3) :=
+  introll x0; introll x1; introll x2; introll x3.
+Tactic Notation "introsll" ident(x0) ident(x1) ident(x2) ident(x3) ident(x4) :=
+  introll x0; introll x1; introll x2; introll x3; introll x4.
+
+Tactic Notation "revertll" ident(x) :=
+  refine (limpl_revert x _); clear x; ll_cleanup.
+
+Tactic Notation "applyll" constr(x) :=
+  applyll_base x.
+
+Local Open Scope LL_goal_scope.
+Example CombinatorB{E:LEnv} (A B C:LType) :
+  (ILL |- (B -o C) -o (A -o B) -o (A -o C)).
+Proof.
+  introsll.
+  applyll H.
+  applyll H0.
+  applyll H1.
+Qed.
+
+Lemma CombinatorC{E:LEnv} (A B C:LType) :
+  (ILL |- (A -o B -o C) -o (B -o A -o C)).
+Proof.
+  introsll x y z.
+  applyll (x z).
+  applyll y.
+Qed.
 
 Definition linear_exact{E:LEnv} {A:LType} {W:LWeight}
     (x:ltype A) {eqn:LWeightEquation W (lweight x)} : LGoal A W.
@@ -851,39 +799,6 @@ Proof.
   rewrite lofcourseval_nil, LWeightZeroL.
   apply (@lgoal_weight _ _ _ H0).
 Defined.
-
-Ltac ll_cleanup :=
-  repeat (
-    rewrite <-!lweightcastzero_eqn ||
-    rewrite !LWeightZeroL ||
-    rewrite !LWeightZeroR);
-  repeat match goal with
-  | [ x : ltype ?A |- _ ] =>
-      lazymatch A with
-      | LOfcourse _ => fail
-      | _ => idtac
-      end;
-      clear x
-  end.
-
-Tactic Notation "introll" ident(x) :=
-  refine (limpl_intro _); intro x; ll_cleanup.
-Tactic Notation "introll" :=
-  let x := fresh in introll x.
-Tactic Notation "introll" ident(x0) ident(x1) :=
-  introll x0; introll x1.
-Tactic Notation "introll" ident(x0) ident(x1) ident(x2) :=
-  introll x0; introll x1; introll x2.
-Tactic Notation "introll" ident(x0) ident(x1) ident(x2) ident(x3) :=
-  introll x0; introll x1; introll x2; introll x3.
-Tactic Notation "introll" ident(x0) ident(x1) ident(x2) ident(x3) ident(x4) :=
-  introll x0; introll x1; introll x2; introll x3; introll x4.
-
-Tactic Notation "revertll" ident(x) :=
-  refine (limpl_revert x _); clear x; ll_cleanup.
-
-Tactic Notation "applyll" constr(x) :=
-  refine (limpl_applygoal x _); ll_cleanup.
 
 Tactic Notation "exactll" constr(x) :=
   refine (linear_exact x).
