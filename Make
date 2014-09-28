@@ -5,3 +5,4 @@ LTensor.v
 LWith.v
 LPlus.v
 LOfcourse.v
+LForall.v

@@ -234,9 +234,15 @@ Notation "'ILL' |- T" := (LGoal T%LL 0%LWeight) (at level 200)
 Notation "'ILL' |- T [ 'using_hypotheses' W  ]" :=
     (LGoal T%LL W%LWeight) (at level 200) : LL_goal_scope.
 
+Ltac introll_base_limpl x :=
+  refine (limpl_intro _); intro x.
+
+Ltac introll_base x :=
+  introll_base_limpl x ||
+  fail "Linear Introduction Failed".
 
 Tactic Notation "introll" ident(x) :=
-  refine (limpl_intro _); intro x; ll_cleanup.
+  introll_base x; ll_cleanup.
 Ltac introsll_auto :=
   let x := fresh "H" in introll x; try introsll_auto.
 Tactic Notation "introsll" := introsll_auto.

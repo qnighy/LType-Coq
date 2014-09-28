@@ -11,6 +11,13 @@ Reserved Notation "A '-o' B"
   (at level 99, right associativity, B at level 200).
 Reserved Notation "! A"
   (at level 30).
+Reserved Notation "'lforall' x .. y , p"
+  (at level 200, x binder, right associativity,
+   format "'[' 'lforall'  '/  ' x  ..  y ,  '/  ' p ']'").
+Reserved Notation "'lexists' x .. y , p"
+  (at level 200, x binder, right associativity,
+   format "'[' 'lexists'  '/  ' x  ..  y ,  '/  ' p ']'").
+
 
 Record LType{E:LEnv} := {
   ltype : Type;
