@@ -69,16 +69,14 @@ Grab Existential Variables.
   intros x; refine (lweight_eqn _).
 Defined.
 
-Local Ltac splitll_base_old := splitll_base.
-Local Ltac destructll_base_old := destructll_base.
-Ltac splitll_base ::=
+Local Ltac splitll_base ::=
   applyll LTensorConstructor ||
   applyll LOneConstructor ||
-  splitll_base_old.
-Ltac destructll_base ::=
+  fail "Constructor not found".
+Local Ltac destructll_base ::=
   applyll LTensorDestructor ||
   applyll LOneDestructor ||
-  destructll_base_old.
+  fail "Destructor not found".
 
 Local Open Scope LL_goal_scope.
 Example TensorComm{E:LEnv} (A B:LType) :
